@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tablet Reminder</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#f6f8fb;--card:#fff;--tx:#1a2330;--mu:#5f6b7a;--ac:#2563eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--bd:#e2e8f0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1520;--card:#18212f;--tx:#eef2f7;--mu:#9aa7b8;--ac:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bd:#2a3547;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1520;--card:#18212f;--tx:#eef2f7;--mu:#9aa7b8;--ac:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--bd:#2a3547;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:8px 0 2px}
+h2{font-size:18px;margin:22px 0 8px}
+.mu{color:var(--mu);font-size:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:10px 0}
+.alert{border-left:5px solid var(--warn)}
+.alert.bad{border-left-color:var(--bad)}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+button{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:#fff;cursor:pointer;min-height:46px}
+button.ok{background:var(--ok);color:#06240f}
+button.ghost{background:transparent;color:var(--mu);border:1px solid var(--bd)}
+button.sm{padding:6px 10px;min-height:34px;font-size:14px}
+input{font:inherit;width:100%;padding:11px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);margin:4px 0 10px}
+label{font-size:14px;color:var(--mu)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.done{opacity:.65}
+</style>
+</head>
+<body>
+<main>
+<h1>💊 Tablet Reminder</h1>
+<div class="mu" id="today"></div>
+<div id="notif"></div>
+<div id="alerts"></div>
+
+<h2>Today’s tablets</h2>
+<div id="list"></div>
+
+<h2>Add a tablet</h2>
+<div class="card">
+<label>Tablet name</label><input id="n" placeholder="e.g. Metformin 500 mg" maxlength="60">
+<div class="g2">
+<div><label>Reminder time</label><input id="t" type="time" value="09:00"></div>
+<div><label>Tablets per day</label><input id="d" type="number" min="1" max="10" value="1"></div>
+<div><label>Tablets left now</label><input id="s" type="number" min="0" max="999" value="30"></div>
+<div><label>Warn me when days left ≤</label><input id="w" type="number" min="1" max="30" value="5"></div>
+</div>
+<button id="add" style="width:100%">Add tablet</button>
+</div>
+
+<h2>Privacy</h2>
+<div class="card mu">Your data stays only on this device, in this browser. Nothing is sent anywhere. Don’t share your phone’s lock code, and use this app as a helper, not as medical advice. Always follow your doctor’s instructions.
+<div class="row" style="margin-top:10px"><button class="ghost sm" id="exp">Download my data</button><button class="ghost sm" id="clr">Erase everything</button></div>
+</div>
+</main>
+<script>
+var KEY="pillapp.v1",S={meds:[]};
+function load(){try{var r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function dkey(){var d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function nowMin(){var d=new Date();return d.getHours()*60+d.getMinutes()}
+function tmin(t){var p=t.split(":");return +p[0]*60+ +p[1]}
+function fmt(t){var p=t.split(":"),h=+p[0],a=h>=12?"PM":"AM";h=h%12||12;return h+":"+p[1]+" "+a}
+function render(){
+  document.getElementById("today").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"});
+  var k=dkey(),L=document.getElementById("list"),A=document.getElementById("alerts"),h="",a="";
+  if(!S.meds.length)h='<div class="card mu">No tablets yet. Add your first one below.</div>';
+  S.meds.forEach(function(m,i){
+    var taken=m.log&&m.log[k]||0,full=taken>=m.perDay,left=m.stock,days=Math.floor(left/m.perDay);
+    var late=!full&&nowMin()>=tmin(m.time);
+    if(late)a+='<div class="card alert"><b>Did you take your '+esc(m.name)+'?</b><div class="mu">It was due at '+fmt(m.time)+'.</div></div>';
+    if(left<=0)a+='<div class="card alert bad"><b>'+esc(m.name)+' has run out.</b> Please buy more today.</div>';
+    else if(days<=m.warn)a+='<div class="card alert bad"><b>Time to buy '+esc(m.name)+'!</b><div class="mu">Only '+left+' left (about '+days+' day'+(days==1?"":"s")+').</div></div>';
+    h+='<div class="card'+(full?' done':'')+'"><div class="row"><div><b>'+esc(m.name)+'</b><div class="mu">'+fmt(m.time)+' · '+taken+'/'+m.perDay+' taken today · '+left+' left</div></div>'+
+      (full?'<span style="color:var(--ok);font-weight:600">✓ Done</span>':'<button class="ok" onclick="take('+i+')">I took it</button>')+
+      '</div><div class="row" style="margin-top:8px"><button class="ghost sm" onclick="refill('+i+')">+ Refilled</button><button class="ghost sm" onclick="del('+i+')">Remove</button></div></div>';
+  });
+  L.innerHTML=h;A.innerHTML=a;
+}
+function take(i){var m=S.meds[i],k=dkey();m.log=m.log||{};if((m.log[k]||0)>=m.perDay)return;m.log[k]=(m.log[k]||0)+1;m.stock=Math.max(0,m.stock-1);save();render()}
+function refill(i){var n=parseInt(prompt("How many tablets did you add?","30"),10);if(n>0){S.meds[i].stock+=n;save();render()}}
+function del(i){if(confirm("Remove this tablet?")){S.meds.splice(i,1);save();render()}}
+document.getElementById("add").onclick=function(){
+  var n=document.getElementById("n").value.trim();if(!n){alert("Please enter the tablet name.");return}
+  S.meds.push({name:n,time:document.getElementById("t").value||"09:00",perDay:Math.max(1,+document.getElementById("d").value||1),stock:Math.max(0,+document.getElementById("s").value||0),warn:Math.max(1,+document.getElementById("w").value||5),log:{}});
+  document.getElementById("n").value="";save();render();
+};
+document.getElementById("exp").onclick=function(){var b=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});var u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="my-tablets.json";a.click()};
+document.getElementById("clr").onclick=function(){if(confirm("Erase all your data from this device?")){S={meds:[]};try{localStorage.removeItem(KEY)}catch(e){}render()}};
+function notifUI(){
+  var el=document.getElementById("notif");
+  if(!("Notification" in window)||Notification.permission!=="default"){el.innerHTML="";return}
+  el.innerHTML='<div class="card row"><span class="mu">Get a pop-up reminder when a tablet is due (app must be open).</span><button class="sm" id="en">Turn on</button></div>';
+  document.getElementById("en").onclick=function(){Notification.requestPermission().then(notifUI)};
+}
+var sent={};
+function tick(){
+  render();
+  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  var k=dkey();
+  S.meds.forEach(function(m,i){
+    var id=k+i;if(sent[id])return;
+    if((m.log&&m.log[k]||0)<m.perDay&&nowMin()>=tmin(m.time)){sent[id]=1;try{new Notification("Time for your tablet",{body:"Did you take "+m.name+"?"})}catch(e){}}
+  });
+}
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){})}
+load();render();notifUI();setInterval(tick,30000);tick();
+</script>
+</body>
+</html>
