@@ -55,14 +55,16 @@ label{font-size:14px;color:var(--mu)}
 </div>
 
 <h2>Privacy</h2>
-<div class="card mu">Your data stays only on this device, in this browser. Nothing is sent anywhere. Don’t share your phone’s lock code, and use this app as a helper, not as medical advice. Always follow your doctor’s instructions.
+<div class="card mu">Your tablet list is saved on this device. To send reminders when the app is closed, tablet names and times are also stored privately on the reminder server. Don’t share your phone’s lock code, and use this app as a helper, not as medical advice. Always follow your doctor’s instructions.
 <div class="row" style="margin-top:10px"><button class="ghost sm" id="exp">Download my data</button><button class="ghost sm" id="clr">Erase everything</button></div>
 </div>
 </main>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script>
 var KEY="pillapp.v1",S={meds:[]};
 function load(){try{var r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}pushSync()}
 function dkey(){var d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
 function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function nowMin(){var d=new Date();return d.getHours()*60+d.getMinutes()}
@@ -98,20 +100,24 @@ function notifUI(){
   var el=document.getElementById("notif");
   if(!("Notification" in window)||Notification.permission!=="default"){el.innerHTML="";return}
   el.innerHTML='<div class="card row"><span class="mu">Get a pop-up reminder when a tablet is due (app must be open).</span><button class="sm" id="en">Turn on</button></div>';
-  document.getElementById("en").onclick=function(){Notification.requestPermission().then(notifUI)};
+  document.getElementById("en").onclick=function(){Notification.requestPermission().then(function(){notifUI();enablePush()})};
 }
 var sent={};
 function tick(){
   render();
-  if(!("Notification" in window)||Notification.permission!=="granted")return;
+  if(!("Notification" in window)||Notification.permission!=="granted"||TK)return;
   var k=dkey();
   S.meds.forEach(function(m,i){
     var id=k+i;if(sent[id])return;
     if((m.log&&m.log[k]||0)<m.perDay&&nowMin()>=tmin(m.time)){sent[id]=1;try{new Notification("Time for your tablet",{body:"Did you take "+m.name+"?"})}catch(e){}}
   });
 }
-if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){})}
-load();render();notifUI();setInterval(tick,30000);tick();
+var FB={apiKey:"AIzaSyDoS-TG7IPeoJG2TB64Q5KA_cxLfCJHBRE",authDomain:"tablet-reminder-35d34.firebaseapp.com",projectId:"tablet-reminder-35d34",storageBucket:"tablet-reminder-35d34.firebasestorage.app",messagingSenderId:"542605937342",appId:"1:542605937342:web:5336d839639e4e2672ecef"};
+var VAPID="BOFiPNV68_vova--CU3p7fwd8OuGpJepOi9gE4J9bDwQrOk5f8MQmR1iEKlBpAYeEJ87h0xnLuvRpY470tKXDuI";
+var TK="";try{TK=localStorage.getItem("pillapp.token")||""}catch(e){}
+function pushSync(){if(!TK)return;var k=dkey();fetch("/.netlify/functions/sync",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:TK,tz:new Date().getTimezoneOffset(),today:k,meds:S.meds.map(function(m){return{name:m.name,time:m.time,perDay:m.perDay,stock:m.stock,warn:m.warn,taken:(m.log&&m.log[k])||0}})})}).catch(function(){})}
+function enablePush(){if(!("serviceWorker" in navigator)||!window.firebase)return;navigator.serviceWorker.register("firebase-messaging-sw.js").then(function(reg){if(!firebase.apps.length)firebase.initializeApp(FB);return firebase.messaging().getToken({vapidKey:VAPID,serviceWorkerRegistration:reg})}).then(function(t){if(t){TK=t;try{localStorage.setItem("pillapp.token",t)}catch(e){}pushSync()}}).catch(function(e){console.log(e)})}
+load();render();notifUI();if("Notification" in window&&Notification.permission==="granted")enablePush();setInterval(tick,30000);tick();
 </script>
 </body>
 </html>
